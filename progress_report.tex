@@ -1,0 +1,101 @@
+\documentclass[11pt, oneside]{article}   	% use "amsart" instead of "article" for AMSLaTeX format
+\usepackage{geometry}                		% See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   		% ... or a4paper or a5paper or ... 
+%\geometry{landscape}                		% Activate for rotated page geometry
+%\usepackage[parfill]{parskip}    		% Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}				% Use pdf, png, jpg, or eps§ with pdflatex; use eps in DVI mode
+								% TeX will automatically convert eps --> pdf in pdflatex		
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{hyperref}
+
+%SetFonts
+
+%SetFonts
+
+
+\title{Progress Report}
+\author{Wesley Nuzzo}
+%\date{}							% Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+
+\section{Repository}
+The repository for the project can be found at \url{https://github.com/UraniumCronorum/SC-FP}.
+
+\section{Original Compiler}
+The code for this section is in the folder {01\_original\_specs}. 
+
+The new code is in hypothesis\_R.py and hypothesis\_tests.py. 
+Both modules should be runnable by navigating to the folder and (with Python installed) typing "python  [filename]", where [filename] is the name of the file.
+
+\subsection{hypothesis strategies}
+The result of running hypothesis\_R.py should look something like this:
+
+\begin{lstlisting}
+R.Program(R.Sum(R.Read(), R.Var('w')))
+(program (+ (read) w))
+R.Program(R.Int(0))
+(program 0)
+R.Program(R.Int(0))
+(program 0)
+R.Program(R.Var('r'))
+(program r)
+R.Program(R.Let((R.Var('a'), R.Let((R.Var('f'), R.Int(1197469428801169583)), R.Int(-72))), R.Negative(R.Let((R.Var('c'), R.Read()), R.Int(100)))))
+(program (let ([a (let ([f 1197469428801169583]) -72)]) (- (let ([c (read)]) 100))))
+\end{lstlisting}
+
+This file contains code that generates a random program in source language for the compiler (which we're calling ``R'').
+
+The implementation makes use of hypothesis's ``recursive'' strategy, which takes a base strategy and a strategy for extending that base strategy and generates recursive data.
+
+As implemented, there's no sanity checking: resulting programs may (and usually will) have undefined variables, for example. The code generation for the extended compiler is more sophisticated.
+
+\subsection{unittests}
+The result of running hypothesis\_tests.py should look like this:
+
+\begin{lstlisting}
+....
+----------------------------------------------------------------------
+Ran 4 tests in 1.645s
+
+OK
+\end{lstlisting}
+
+This file contains unittests that use the hypothesis generated code and test its properties.
+
+The ``RTest'' tests contains a checkForm() test, which is more of a test that hypothesis' generated code is correctly formed, and a testEval() test, which is a true property test: it tests that running any program in the language results in outputting an integer.
+
+``UniquifyTest'' tests the first step in the compilation chain, ``uniquify''. As implemented, it simply checks that the resulting code is in the correct intermediate language (and is well-formed), and that running the code results in the same output as running the original code. The other requirement, that variables names do not get reused in new variable definitions, is currently taken care of by the implementation of R\_uniq's ``interpret'' method.
+
+A couple things to note: first, ``R'' allows user input, so this is handled by generating a random input stream and ensuring that the second execution receives the same data; second, compilation may fail on this step if a variable is used before it is defined. If the compiler rejects its input for this reason, the test ignores that case.
+
+``PipelineTest'' test each step in the pipeline, checking that the result of each step is in the correct language and evaluates to the same result as the previous step. If the compilation fails midway through, it checks correctness up until that failure. (As far as I'm aware, this should only happen if either a variable is not defined, or the program contains the input function, which has not been implemented in the later intermediate languages.)
+
+\section{Function Extension}
+The code for this section is in the folder {02\_function\_extension}.
+
+This code adds the ability to define and call functions in ``R'', and implements the first step in compilation for those function calls, including hypothesis-based unit tests for that step.
+
+It also features more sophisticated code generation, including editing generated code to only used defined variables, and generating function calls with the correct number of arguments.
+
+\subsection{hypothesis strategies}
+The code hypothesis\_R.py is quite a bit more complicated this time.
+
+The function assignVarNames() corrects the problem of generated code using undefined variables. It attempts to rewrite those variables to use a defined variable and returns True if it succeeds and False if it fails (in case there are no defined variables yet).
+
+The strategies provided are ``simple\_programs'', which is basically the same as the implementation from before, ``full\_programs()'', which adds function calls, and ``safe\_programs()'' and ``safer\_programs()'', which additionally try to make sure that all variables are defined before they're used.
+
+\subsection{unit tests}
+The file hypothesis\_tests.py contains the unit tests for this section.
+
+Some of these tests run rather slowly because safer\_programs() takes a while to generate valid programs.
+
+Most of the tests here are similar to the tests from the previous section, but differ in that they use the new strategies. Several tests are done with a variety of strategies.
+
+Additionally, there's a test of the ``repr()'' method, which tests that the output can be read back in to be equivalent to the original object. This is a good illustration of the normal use of property-based testing, and could be a good basis for a test of a parser for ``R'' as well.
+
+The current handling of infinite recursion is that we simply ignore the cases where evaluating exceeds Python's built-in recursion limit. I intend to do something more sophisticated later.
+
+\end{document}  
