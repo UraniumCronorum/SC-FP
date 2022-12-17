@@ -59,6 +59,9 @@ def parse_R(ast):
         assert len(binding) == 2
         return R.Let(binding = (parse_R(binding[0]), parse_R(binding[1])),
                      body = parse_R(body))
+    elif head == 'read':
+        assert len(rest) == 0
+        return R.Read()
     else:
         raise ValueError (head)
 

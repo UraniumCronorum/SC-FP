@@ -253,6 +253,17 @@ def pipeline(program):
         out.append(program)
     return out
 
+def partial_pipeline(program):
+    steps = (uniquify, circleFlatten, select_instr, assign_homes, patch)
+    out = [program]
+    for step in steps:
+        try:
+            program = step(program)
+            out.append(program)
+        except Exception as e:
+            return out, e
+    return out, None
+
 def writeOut(program, path):
     out = str(program)
     with open(path, 'w') as fi:
