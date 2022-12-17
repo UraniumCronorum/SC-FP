@@ -72,10 +72,11 @@ class Function(SyntaxObject):
         args_str = ' '.join(str(arg) for arg in self.arguments)
         return '(function %s (%s) %s)' % (self.name, args_str, self.body)
 
-    def interpret(self, *arguments):
+    def interpret(self, *arguments, f_env = {}):
         assert len(arguments) == len(self.arguments)
         env = {argname:argval for argname, argval in
                zip(self.arguments,arguments)}
+        env |= f_env
         return self.body.interpret(env)
 
     def checkForm(self):
@@ -116,7 +117,8 @@ class Call(Expression):
         if len(env[self.fname].arguments) != len(self.args):
             raise WrongNumberOfArgs(self.fname, len(self.args))
         args = [arg.interpret(env) for arg in self.args]
-        return env[self.fname].interpret(*args)
+        f_env = {a:b for a,b in env.items() if isinstance(a, Fname)}
+        return env[self.fname].interpret(*args, f_env=f_env)
 
     def checkForm(self):
         assert isinstance(self.fname, Fname)

@@ -1,5 +1,6 @@
 
 from Languages import R, R_uniq, C_flat, X_var, X_approx, X
+from functools import reduce
 
 ########
 # Uniquify
@@ -74,47 +75,71 @@ def uniquify(expr, used = {}):
 
 def circleFlatten(expr, ans=None):
     ty = type(expr)
+    # idea: functions are translated exactly as normal, just with args
+    # program translates functions and then creates a main function
+    # also need to add the call operation
     if ty == R_uniq.Program:
+        fcns, body = expr.functions, expr.body
+        compiled_functions = [circleFlatten(function) for function in fcns]
+        main_function = circleFlatten(R_uniq.Function('main', [], body))
+        return C_flat.Program(main_function, *compiled_functions)
+    elif ty == R_uniq.Function:
         assert ans == None
         ans = 'retvar'
-        subexpr = circleFlatten(expr.body, ans)
-        return C_flat.Program({ans}|subexpr.variables,
-                              *subexpr.instrs + [C_flat.Return(C_flat.Var(ans))])
+        body = circleFlatten(expr.body, ans)
+        return C_flat.Function(expr.name, expr.arguments,
+                               {ans}|body.variables,
+                               *body.instrs + [C_flat.Return(C_flat.Var(ans))])
     # I/0
     elif ty == R_uniq.Read:
-        return C_flat.Program({ans},
-                              C_flat.Assign(C_flat.Var(ans), C_flat.Read()))
+        return C_flat.Function(None, set(), {ans},
+                               C_flat.Assign(C_flat.Var(ans), C_flat.Read()))
     # Type
     elif ty == R_uniq.Int:
-        return C_flat.Program({ans},
+        return C_flat.Function(None, set(), {ans},
                               C_flat.Assign(C_flat.Var(ans), C_flat.Int(expr.val)))
     elif ty == R_uniq.Negative:
         subexpr = circleFlatten(expr.expr, ans)
-        return C_flat.Program(subexpr.variables,
-                              *subexpr.instrs +
-                              [C_flat.Assign(C_flat.Var(ans),
-                                             C_flat.Negative(C_flat.Var(ans)))])
+        return C_flat.Function(None, set(),
+                               subexpr.variables,
+                               *subexpr.instrs +
+                               [C_flat.Assign(C_flat.Var(ans),
+                                              C_flat.Negative(C_flat.Var(ans)))])
     elif ty == R_uniq.Sum:
         helper = ans + '-sum-rhs'
         lhs, rhs = (circleFlatten(expr.lhs, ans),
                     circleFlatten(expr.rhs, helper))
-        return C_flat.Program(lhs.variables|rhs.variables,
-                              *lhs.instrs+rhs.instrs+
-                              [C_flat.Assign(C_flat.Var(ans),
-                                             C_flat.Sum(C_flat.Var(ans),
-                                                        C_flat.Var(helper)))])
+        return C_flat.Function(None, set(),
+                               lhs.variables|rhs.variables,
+                               *lhs.instrs+rhs.instrs+
+                               [C_flat.Assign(C_flat.Var(ans),
+                                              C_flat.Sum(C_flat.Var(ans),
+                                                         C_flat.Var(helper)))])
     elif ty == R_uniq.Var:
-        return C_flat.Program({ans, expr.name},
-                              C_flat.Assign(C_flat.Var(ans),
-                                            C_flat.Var(expr.name)))
+        return C_flat.Function(None, set(),
+                               {ans, expr.name},
+                               C_flat.Assign(C_flat.Var(ans),
+                                             C_flat.Var(expr.name)))
     elif ty == R_uniq.Let:
         var, subexpr = expr.binding
         bindingExpr = circleFlatten(subexpr, var.name)
         bodyExpr = circleFlatten(expr.body, ans)
-        return C_flat.Program(bindingExpr.variables|bodyExpr.variables,
-                              *bindingExpr.instrs + bodyExpr.instrs)
+        return C_flat.Function(None, set(),
+                               bindingExpr.variables|bodyExpr.variables,
+                               *bindingExpr.instrs + bodyExpr.instrs)
+    elif ty == R_uniq.Call:
+        name, args = expr.name, expr.args
+        arg_stmts = [circleFlatten(arg, name + '-arg-' + str(i))
+                     for i, arg in enumerate(args)]
+        return C_flat.Function(None, set(),
+                               reduce(lambda a,b:a|b,
+                                      [arg.variables for arg in arg_stmts],
+                                      set()),
+                               *(reduce(lambda a,b:a+b, (arg.instrs for arg in arg_stmts), []) +
+                                 C_flat.Call(name, *[name + '-arg-' + str(i)
+                                                     for i, _ in enumerate(args)])))
     else:
-        raise TypeError('circleFlatten: %s' % str(expr))
+        raise Exception('circleFlatten: %s' % str(expr))
 
 def squareFlatten(expr):
     raise TypeError('circleFlatten: %s' % str(expr))
@@ -277,6 +302,17 @@ def pipeline(program):
         program = step(program)
         out.append(program)
     return out
+
+def partial_pipeline(program):
+    steps = (uniquify, circleFlatten, select_instr, assign_homes, patch)
+    out = [program]
+    for step in steps:
+        try:
+            program = step(program)
+            out.append(program)
+        except Exception as e:
+            return out, e
+    return out, None
 
 def writeOut(program, path):
     out = str(program)
