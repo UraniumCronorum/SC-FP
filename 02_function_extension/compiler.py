@@ -5,28 +5,28 @@ from functools import reduce
 ########
 # Uniquify
 
-def uniquify(expr, used = {}):
+def uniquify(expr, used_v = {}, used_f = {}):
     ''' Naming convention: variable name followed by number of used var names.'''
     ty = type(expr)
     if ty == R.Program:
         fcns = []
-        new = used.copy()
         for f in expr.functions:
             name = f.name.name
-            new[name] = new.get(name, 0) + 1
-            name = name + '-' + str(new.get(name, 0))
+            used_f[name] = used_f.get(name, 0) + 1
+            name = name + '-f' + str(used_f[name])
             fcns.append(R_uniq.Function(R_uniq.Fname(name),
                                         f.arguments,
                                         f.body))
         for f in fcns:
-            local = new.copy()
             args = []
+            local_v = used_v.copy()
             for arg in f.arguments:
-                name = arg.name + '-' + str(local.get(name, 0))
+                local_v[arg.name] = local_v.get(arg.name, 0) + 1
+                name = arg.name + '-v' + str(local_v[arg.name])
                 args.append(R_uniq.Var(name))
             f.arguments = args
-            f.body = uniquify(f.body, local)
-        return R_uniq.Program(fcns, uniquify(expr.body, new))
+            f.body = uniquify(f.body, local_v, used_f)
+        return R_uniq.Program(fcns, uniquify(expr.body, used_v, used_f))
     # I/0
     elif ty == R.Read:
         return R_uniq.Read()
@@ -35,33 +35,33 @@ def uniquify(expr, used = {}):
         return R_uniq.Int(expr.val)
     # Operators
     elif ty == R.Negative:
-        return R_uniq.Negative(uniquify(expr.expr, used))
+        return R_uniq.Negative(uniquify(expr.expr, used_v, used_f))
     elif ty == R.Sum:
-        return R_uniq.Sum(uniquify(expr.lhs, used),
-                          uniquify(expr.rhs, used))
+        return R_uniq.Sum(uniquify(expr.lhs, used_v, used_f),
+                          uniquify(expr.rhs, used_v, used_f))
     # Variables
     elif ty == R.Var:
         try:
-            name = expr.name + '-' + str(used[expr.name])
+            name = expr.name + '-v' + str(used_v[expr.name])
             return R_uniq.Var(name)
         except KeyError as e:
             raise R.VarNotDefined from e
     elif ty == R.Let:
-        new = used.copy()
+        new = used_v.copy()
         var, subexpr = expr.binding
         name = var.name
-        if name in used:
+        if name in used_v:
             new[name] += 1
         else:
             new[name] = 0
-        new_binding = (R_uniq.Var(name + '-' + str(new[name])),
-                       uniquify(subexpr, used))
+        new_binding = (R_uniq.Var(name + '-v' + str(new[name])),
+                       uniquify(subexpr, used_v, used_f))
         return R_uniq.Let(new_binding,
-                          uniquify(expr.body, new))
+                          uniquify(expr.body, new, used_f))
     elif ty == R.Call:
-        args = [uniquify(arg, used) for arg in expr.args]
+        args = [uniquify(arg, used_v, used_f) for arg in expr.args]
         try:
-            name = expr.fname.name + '-' + str(used[expr.fname.name])
+            name = expr.fname.name + '-f' + str(used_f[expr.fname.name])
             name = R_uniq.Fname(name)
             return R_uniq.Call(name, *args)
         except KeyError as e:
