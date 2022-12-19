@@ -1,7 +1,7 @@
 
 from hypothesis import given
 from hypothesis_R import *
-from unittest import mock
+from unittest import mock, TestCase, main
 import itertools
 
 example_a = R.Let((R.Var('x'), R.Int(1)), R.Int(1))
@@ -34,43 +34,44 @@ def apply_context(expression, context):
     new_binding = (R.Var('expr'), expression)
     context.body.binding = new_binding
 
-@given(contexts())
-def simpleTest(ctx):
-    record = []
-    def gen():
-        while True:
-            n = random.randint(0,100)
-            record.append(n)
-            yield n
-    apply_context(example_a, ctx)
-    with mock.patch('_sys.readInt', side_effect = gen()):
-        result_a = ctx.interpret()
-    apply_context(example_b, ctx)
-    with mock.patch('_sys.readInt',
-                    side_effect=itertools.chain(record, gen())):
-        result_b = ctx.interpret()
-    assert result_a == result_b
+class ConfidentialityTest(TestCase):
 
-@given(get_example_pair(), contexts())
-def anotherTest(pair, ctx):
-    expr_a, expr_b = pair
+    @given(contexts())
+    def test_simple_example(self, ctx):
+        record = []
+        def gen():
+            while True:
+                n = random.randint(0,100)
+                record.append(n)
+                yield n
+        apply_context(example_a, ctx)
+        with mock.patch('_sys.readInt', side_effect = gen()):
+            result_a = ctx.interpret()
+        apply_context(example_b, ctx)
+        with mock.patch('_sys.readInt',
+                        side_effect=itertools.chain(record, gen())):
+            result_b = ctx.interpret()
+        assert result_a == result_b
 
-    record = []
-    def gen():
-        while True:
-            n = random.randint(0,100)
-            record.append(n)
-            yield n
-    apply_context(expr_a, ctx)
-    with mock.patch('_sys.readInt', side_effect = gen()):
-        result_a = ctx.interpret()
-    apply_context(expr_b, ctx)
-    with mock.patch('_sys.readInt',
-                    side_effect=itertools.chain(record, gen())):
-        result_b = ctx.interpret()
-    assert result_a == result_b
+    @given(get_example_pair(), contexts())
+    def test_general(self, pair, ctx):
+        expr_a, expr_b = pair
+
+        record = []
+        def gen():
+            while True:
+                n = random.randint(0,100)
+                record.append(n)
+                yield n
+        apply_context(expr_a, ctx)
+        with mock.patch('_sys.readInt', side_effect = gen()):
+            result_a = ctx.interpret()
+        apply_context(expr_b, ctx)
+        with mock.patch('_sys.readInt',
+                        side_effect=itertools.chain(record, gen())):
+            result_b = ctx.interpret()
+        assert result_a == result_b
 
 
 if __name__ == '__main__':
-    simpleTest()
-    anotherTest()
+    main()

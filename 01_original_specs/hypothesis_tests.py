@@ -104,11 +104,9 @@ class PipelineTest(unittest.TestCase):
     def test_partial_pipeline(self, p):
         pipeline_results, e = partial_pipeline(p)
         if e is not None:
-            if isinstance(e, R.VarNotDefined):
-                return # ignore
-            elif isinstance(e, TypeError):
-                if e.args[0] != 'select_instr (assign): (read)':
-                    raise e
+            if (isinstance(e, TypeError) and
+                e.args[0] == 'select_instr (assign): (read)'):
+                pass
             else:
                 raise e
 
